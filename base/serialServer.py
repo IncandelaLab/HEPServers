@@ -11,7 +11,7 @@ class serialServer(object):
         read_termination='\r',
         mclsep=None,
         ):
-        
+
         self._port     = port
         self._baudrate = baudrate
         self._timeout  = timeout
