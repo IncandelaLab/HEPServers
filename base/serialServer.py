@@ -1,5 +1,19 @@
 import serial
 
+DEBUG = False
+
+def partition_any(string,seps):
+    """partitions string at first instance of any element of seps"""
+    least_index = [len(string),-1]
+    for i,sep in enumerate(seps):
+        if sep in string:
+            index = string.index(sep)
+            if index < least_index[0]:
+                least_index = [index,i]
+    if least_index[1] == -1:
+        return string,'',''
+    return string.partition(seps[least_index[1]])
+
 class serialServer(object):
 
     def __init__(
@@ -7,8 +21,8 @@ class serialServer(object):
         port,
         baudrate,
         timeout=0,
-        write_termination='\r',
-        read_termination='\r',
+        write_termination='\r\n',
+        read_termination='\r\n',
         mclsep=None,
         ):
 
@@ -18,6 +32,9 @@ class serialServer(object):
         self._write_termination = write_termination
         self._read_termination  = read_termination
         self._mclsep = mclsep
+
+        self._seps = [self._read_termination]
+        if self._mclsep:self._seps.append(self._mclsep)
 
         self.lines_read = []
 
@@ -44,7 +61,8 @@ class serialServer(object):
                             args,
                             kwargs,
                             ))
-                    function(self,*args,**kwargs)
+                    ret = function(self,*args,**kwargs)
+                    return ret
                 else:
                     print("mode is {}, needed {} for function {} with args {} kwargs {}".format(
                         self._mode,
@@ -58,7 +76,7 @@ class serialServer(object):
 
     @enforce_mode('closed')
     def open(self):
-        self._ser = serial.Serial(port,baudrate,timeout=timeout)
+        self._ser = serial.Serial(self._port,self._baudrate,timeout=self._timeout)
         self._mode = 'open'
 
     @enforce_mode('open')
@@ -88,16 +106,29 @@ class serialServer(object):
             return False
 
         for line in avail:
-
-            if self._mclsep: # non-empty string; not None
-                while self._mclsep in line:
-                    bef,_,line = line.partition(self._mclsep)
-                    self.lines_read.append(bef)
-            
-            if self._read_termination: # non-empty string; not None
-                if line.endswith(self._read_termination):
-                    line,_,_ = line.rpartition(self._read_termination)
-
-            self.lines_read.append(line)
+            while len(line)>0:
+                bef,_,line = partition_any(line,self._seps)
+                self.lines_read.append(bef)
 
         return True
+
+
+# Test base server on basic Keithly 2410 commands
+if __name__ == '__main__':
+    import time
+    s = serialServer('COM6',9600,mclsep=';')
+    s._write_line("*RST")
+    s._write_line(":SOUR:FUNC?")
+    s._write_line(":SOUR:FUNC?")
+    s._write_line(":SOUR:FUNC?")
+    s._write_line("*IDN?")
+    s._write_line("*IDN?")
+    s._write_line("*IDN?")
+    s._write_line("*IDN?")
+    s.read_lines()
+    print(s.lines_read)
+    time.sleep(1)
+    s.read_lines()
+    print(s.lines_read)
+
+    s.close()
